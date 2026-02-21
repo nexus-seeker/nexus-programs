@@ -1,6 +1,7 @@
-use anchor_lang::prelude::*;
-use crate::state::{AgentProfile, PolicyVault, ExecutionReceipt, ReceiptStatus};
 use crate::errors::NexusError;
+use crate::instructions::policy_math::apply_daily_window;
+use crate::state::{AgentProfile, ExecutionReceipt, PolicyVault, ReceiptStatus};
+use anchor_lang::prelude::*;
 
 #[derive(Accounts)]
 pub struct CheckAndRecord<'info> {
@@ -47,10 +48,10 @@ pub fn handler(
     let now = Clock::get()?.unix_timestamp;
 
     // 1. Reset daily spend if 24h has passed
-    if now - vault.last_reset_ts > 86400 {
-        vault.current_spend = 0;
-        vault.last_reset_ts = now;
-    }
+    let (effective_spend, next_reset_ts) =
+        apply_daily_window(now, vault.last_reset_ts, vault.current_spend);
+    vault.current_spend = effective_spend;
+    vault.last_reset_ts = next_reset_ts;
 
     // 2. Check is_active kill switch
     require!(vault.is_active, NexusError::PolicyInactive);
@@ -66,7 +67,10 @@ pub fn handler(
         .current_spend
         .checked_add(amount)
         .ok_or(NexusError::Overflow)?;
-    require!(new_spend <= vault.daily_max_lamports, NexusError::DailyLimitExceeded);
+    require!(
+        new_spend <= vault.daily_max_lamports,
+        NexusError::DailyLimitExceeded
+    );
 
     // 5. Update state + increment receipt id
     vault.current_spend = new_spend;
