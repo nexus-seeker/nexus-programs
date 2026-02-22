@@ -2,14 +2,14 @@ import * as anchor from "@coral-xyz/anchor";
 import { Program } from "@coral-xyz/anchor";
 import { Onchain } from "../target/types/onchain";
 import { expect } from "chai";
-import { PublicKey, SystemProgram } from "@solana/web3.js";
+import { Keypair, LAMPORTS_PER_SOL, PublicKey, SystemProgram, Transaction } from "@solana/web3.js";
 
 describe("nexus", () => {
   const provider = anchor.AnchorProvider.env();
   anchor.setProvider(provider);
 
   const program = anchor.workspace.onchain as Program<Onchain>;
-  const owner = provider.wallet;
+  const owner = Keypair.generate();
 
   // PDA derivations
   function findProfilePDA(ownerKey: PublicKey): [PublicKey, number] {
@@ -41,6 +41,18 @@ describe("nexus", () => {
   const [profilePDA] = findProfilePDA(owner.publicKey);
   const [policyPDA] = findPolicyPDA(owner.publicKey);
 
+  before("fund isolated owner", async () => {
+    const tx = new Transaction().add(
+      SystemProgram.transfer({
+        fromPubkey: provider.wallet.publicKey,
+        toPubkey: owner.publicKey,
+        lamports: LAMPORTS_PER_SOL,
+      })
+    );
+
+    await provider.sendAndConfirm(tx);
+  });
+
   // ─────────────────────────────────────────────────────────────────────
   // Setup: Create profile and policy
   // ─────────────────────────────────────────────────────────────────────
@@ -52,6 +64,7 @@ describe("nexus", () => {
         owner: owner.publicKey,
         systemProgram: SystemProgram.programId,
       })
+      .signers([owner])
       .rpc();
 
     console.log("  create_profile tx:", tx);
@@ -74,6 +87,7 @@ describe("nexus", () => {
         owner: owner.publicKey,
         systemProgram: SystemProgram.programId,
       })
+      .signers([owner])
       .rpc();
 
     console.log("  update_policy tx:", tx);
@@ -107,6 +121,7 @@ describe("nexus", () => {
         owner: owner.publicKey,
         systemProgram: SystemProgram.programId,
       })
+      .signers([owner])
       .rpc();
 
     console.log("  check_and_record tx:", tx);
@@ -148,6 +163,7 @@ describe("nexus", () => {
           owner: owner.publicKey,
           systemProgram: SystemProgram.programId,
         })
+        .signers([owner])
         .rpc();
       expect.fail("Expected DailyLimitExceeded error");
     } catch (err: any) {
@@ -177,6 +193,7 @@ describe("nexus", () => {
           owner: owner.publicKey,
           systemProgram: SystemProgram.programId,
         })
+        .signers([owner])
         .rpc();
       expect.fail("Expected ProtocolNotAllowed error");
     } catch (err: any) {
@@ -207,6 +224,7 @@ describe("nexus", () => {
         owner: owner.publicKey,
         systemProgram: SystemProgram.programId,
       })
+      .signers([owner])
       .rpc();
 
     // current_spend should still be 100_000_000 from test 1 because
@@ -232,6 +250,7 @@ describe("nexus", () => {
         owner: owner.publicKey,
         systemProgram: SystemProgram.programId,
       })
+      .signers([owner])
       .rpc();
 
     console.log("  check_and_record (after policy update) tx:", tx);
@@ -257,6 +276,7 @@ describe("nexus", () => {
         owner: owner.publicKey,
         systemProgram: SystemProgram.programId,
       })
+      .signers([owner])
       .rpc();
 
     const amount = new anchor.BN(10_000_000);
@@ -274,6 +294,7 @@ describe("nexus", () => {
           owner: owner.publicKey,
           systemProgram: SystemProgram.programId,
         })
+        .signers([owner])
         .rpc();
       expect.fail("Expected PolicyInactive error");
     } catch (err: any) {
@@ -293,6 +314,7 @@ describe("nexus", () => {
         owner: owner.publicKey,
         systemProgram: SystemProgram.programId,
       })
+      .signers([owner])
       .rpc();
   });
 
@@ -313,6 +335,7 @@ describe("nexus", () => {
         agentProfile: profilePDA,
         owner: owner.publicKey,
       })
+      .signers([owner])
       .rpc();
 
     console.log("  close_receipt tx:", tx);
