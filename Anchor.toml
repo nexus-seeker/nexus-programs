@@ -6,10 +6,10 @@ resolution = true
 skip-lint = false
 
 [programs.localnet]
-onchain = "DxV7vXf919YddC74X726PpsrPpHLXNZtdBsk6Lweh3HJ"
+onchain = "5twpBNVkDu9YkuQ2aDRWTB1wvA4wjBu42Q42kn7Fy2G5"
 
 [programs.devnet]
-onchain = "DxV7vXf919YddC74X726PpsrPpHLXNZtdBsk6Lweh3HJ"
+onchain = "5twpBNVkDu9YkuQ2aDRWTB1wvA4wjBu42Q42kn7Fy2G5"
 
 [registry]
 url = "https://api.apr.dev"

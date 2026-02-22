@@ -6,7 +6,7 @@ pub mod state;
 
 use instructions::*;
 
-declare_id!("DxV7vXf919YddC74X726PpsrPpHLXNZtdBsk6Lweh3HJ");
+declare_id!("5twpBNVkDu9YkuQ2aDRWTB1wvA4wjBu42Q42kn7Fy2G5");
 
 #[program]
 pub mod onchain {
@@ -33,9 +33,8 @@ pub mod onchain {
         ctx: Context<CheckAndRecord>,
         amount: u64,
         protocol: String,
-        intent_hash: [u8; 32],
     ) -> Result<()> {
-        instructions::check_and_record::handler(ctx, amount, protocol, intent_hash)
+        instructions::check_and_record::handler(ctx, amount, protocol)
     }
 
     /// Closes an ExecutionReceipt PDA and refunds rent to the owner.

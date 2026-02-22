@@ -3,6 +3,27 @@ use crate::instructions::policy_math::apply_daily_window;
 use crate::state::{AgentProfile, ExecutionReceipt, PolicyVault, ReceiptStatus};
 use anchor_lang::prelude::*;
 
+fn derive_intent_hash(owner: &Pubkey, amount: u64, protocol: &str) -> [u8; 32] {
+    let mut hash = owner.to_bytes();
+
+    for (index, byte) in amount.to_le_bytes().iter().enumerate() {
+        let slot = (index * 7) % 32;
+        hash[slot] = hash[slot].wrapping_add(*byte).rotate_left(1);
+    }
+
+    for (index, byte) in protocol.as_bytes().iter().enumerate() {
+        let slot = index % 32;
+        let salt = (index as u8).wrapping_mul(31);
+        hash[slot] = hash[slot].wrapping_add(*byte ^ salt).rotate_left(1);
+    }
+
+    if hash == [0u8; 32] {
+        hash[0] = 1;
+    }
+
+    hash
+}
+
 #[derive(Accounts)]
 pub struct CheckAndRecord<'info> {
     #[account(
@@ -38,14 +59,10 @@ pub struct CheckAndRecord<'info> {
     pub system_program: Program<'info, System>,
 }
 
-pub fn handler(
-    ctx: Context<CheckAndRecord>,
-    amount: u64,
-    protocol: String,
-    intent_hash: [u8; 32],
-) -> Result<()> {
+pub fn handler(ctx: Context<CheckAndRecord>, amount: u64, protocol: String) -> Result<()> {
     let vault = &mut ctx.accounts.policy_vault;
     let now = Clock::get()?.unix_timestamp;
+    let intent_hash = derive_intent_hash(&ctx.accounts.owner.key(), amount, &protocol);
 
     // 1. Reset daily spend if 24h has passed
     let (effective_spend, next_reset_ts) =
@@ -74,7 +91,10 @@ pub fn handler(
 
     // 5. Update state + increment receipt id
     vault.current_spend = new_spend;
-    vault.next_receipt_id += 1;
+    vault.next_receipt_id = vault
+        .next_receipt_id
+        .checked_add(1)
+        .ok_or(NexusError::Overflow)?;
 
     // 6. Initialize ExecutionReceipt PDA
     let receipt = &mut ctx.accounts.execution_receipt;
