@@ -6,7 +6,7 @@ pub mod state;
 
 use instructions::*;
 
-declare_id!("5twpBNVkDu9YkuQ2aDRWTB1wvA4wjBu42Q42kn7Fy2G5");
+declare_id!("DxV7vXf919YddC74X726PpsrPpHLXNZtdBsk6Lweh3HJ");
 
 #[program]
 pub mod onchain {

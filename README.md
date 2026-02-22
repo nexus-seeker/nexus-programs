@@ -2,7 +2,7 @@
 
 ## Program ID
 
-`5twpBNVkDu9YkuQ2aDRWTB1wvA4wjBu42Q42kn7Fy2G5`
+`DxV7vXf919YddC74X726PpsrPpHLXNZtdBsk6Lweh3HJ`
 
 ## PDA Seeds
 
