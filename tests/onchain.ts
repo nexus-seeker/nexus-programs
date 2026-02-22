@@ -2,7 +2,13 @@ import * as anchor from "@coral-xyz/anchor";
 import { Program } from "@coral-xyz/anchor";
 import { Onchain } from "../target/types/onchain";
 import { expect } from "chai";
-import { Keypair, LAMPORTS_PER_SOL, PublicKey, SystemProgram, Transaction } from "@solana/web3.js";
+import {
+  Keypair,
+  LAMPORTS_PER_SOL,
+  PublicKey,
+  SystemProgram,
+  Transaction,
+} from "@solana/web3.js";
 
 describe("nexus", () => {
   const provider = anchor.AnchorProvider.env();
@@ -10,6 +16,8 @@ describe("nexus", () => {
 
   const program = anchor.workspace.onchain as Program<Onchain>;
   const owner = Keypair.generate();
+  const unauthorized = Keypair.generate();
+  const attacker = Keypair.generate();
 
   // PDA derivations
   function findProfilePDA(ownerKey: PublicKey): [PublicKey, number] {
@@ -41,16 +49,74 @@ describe("nexus", () => {
   const [profilePDA] = findProfilePDA(owner.publicKey);
   const [policyPDA] = findPolicyPDA(owner.publicKey);
 
-  before("fund isolated owner", async () => {
-    const tx = new Transaction().add(
-      SystemProgram.transfer({
-        fromPubkey: provider.wallet.publicKey,
-        toPubkey: owner.publicKey,
-        lamports: LAMPORTS_PER_SOL,
-      })
-    );
+  before("fund isolated users", async () => {
+    const { connection } = provider;
+    const providerPubkey = provider.wallet.publicKey;
+    const isDevnet = connection.rpcEndpoint.includes("devnet");
 
-    await provider.sendAndConfirm(tx);
+    const transferFromProvider = async (toPubkey: PublicKey, lamports: number) => {
+      if (lamports <= 0) return;
+
+      const maxAttempts = 3;
+      for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+        try {
+          const tx = new Transaction().add(
+            SystemProgram.transfer({
+              fromPubkey: providerPubkey,
+              toPubkey,
+              lamports,
+            })
+          );
+          await provider.sendAndConfirm(tx, [], { commitment: "confirmed" });
+          return;
+        } catch (err) {
+          const message = err instanceof Error ? err.message : String(err);
+          if (!message.includes("Blockhash not found") || attempt === maxAttempts) {
+            throw err;
+          }
+        }
+      }
+    };
+
+    const airdropAndConfirm = async (pubkey: PublicKey, lamports: number) => {
+      const signature = await connection.requestAirdrop(pubkey, lamports);
+      const latestBlockhash = await connection.getLatestBlockhash();
+      await connection.confirmTransaction(
+        {
+          signature,
+          blockhash: latestBlockhash.blockhash,
+          lastValidBlockHeight: latestBlockhash.lastValidBlockHeight,
+        },
+        "confirmed"
+      );
+    };
+
+    const ensureFunded = async (target: PublicKey, minimumLamports: number) => {
+      const currentBalance = await connection.getBalance(target, "confirmed");
+      if (currentBalance >= minimumLamports) {
+        return;
+      }
+
+      const topUpLamports = minimumLamports - currentBalance;
+      const providerBalance = await connection.getBalance(providerPubkey, "confirmed");
+      const feeReserveLamports = Math.floor(0.01 * LAMPORTS_PER_SOL);
+
+      if (providerBalance < topUpLamports + feeReserveLamports) {
+        if (isDevnet) {
+          throw new Error(
+            `Provider wallet is underfunded on devnet. Need ${(topUpLamports + feeReserveLamports) / LAMPORTS_PER_SOL} SOL available for transfers + fees.`
+          );
+        }
+
+        await airdropAndConfirm(providerPubkey, topUpLamports + feeReserveLamports);
+      }
+
+      await transferFromProvider(target, topUpLamports);
+    };
+
+    await ensureFunded(owner.publicKey, Math.floor(0.15 * LAMPORTS_PER_SOL));
+    await ensureFunded(unauthorized.publicKey, Math.floor(0.01 * LAMPORTS_PER_SOL));
+    await ensureFunded(attacker.publicKey, Math.floor(0.01 * LAMPORTS_PER_SOL));
   });
 
   // ─────────────────────────────────────────────────────────────────────
@@ -107,13 +173,11 @@ describe("nexus", () => {
   it("happy path: check_and_record succeeds within limits", async () => {
     const amount = new anchor.BN(100_000_000); // 0.1 SOL
     const protocol = "jupiter";
-    const intentHash = Buffer.alloc(32);
-    intentHash.write("swap 0.1 SOL to USDC");
 
     const [receiptPDA] = findReceiptPDA(owner.publicKey, 0);
 
     const tx = await program.methods
-      .checkAndRecord(amount, protocol, Array.from(intentHash))
+      .checkAndRecord(amount, protocol)
       .accounts({
         agentProfile: profilePDA,
         policyVault: policyPDA,
@@ -131,6 +195,7 @@ describe("nexus", () => {
     expect(receipt.agentProfile.toString()).to.equal(profilePDA.toString());
     expect(receipt.protocol).to.equal("jupiter");
     expect(receipt.amountLamports.toNumber()).to.equal(100_000_000);
+    expect(Array.from(receipt.intentHash as number[]).every((byte) => byte === 0)).to.equal(false);
     expect(receipt.status).to.deep.equal({ completed: {} });
     expect(receipt.timestamp.toNumber()).to.be.greaterThan(0);
 
@@ -148,14 +213,12 @@ describe("nexus", () => {
     // Trying to swap 0.5 SOL more (total 0.6 SOL) should fail.
     const amount = new anchor.BN(500_000_000); // 0.5 SOL
     const protocol = "jupiter";
-    const intentHash = Buffer.alloc(32);
-    intentHash.write("swap 0.5 SOL to USDC");
 
     const [receiptPDA] = findReceiptPDA(owner.publicKey, 1);
 
     try {
       await program.methods
-        .checkAndRecord(amount, protocol, Array.from(intentHash))
+        .checkAndRecord(amount, protocol)
         .accounts({
           agentProfile: profilePDA,
           policyVault: policyPDA,
@@ -178,14 +241,12 @@ describe("nexus", () => {
   it("protocol breach: check_and_record reverts with ProtocolNotAllowed", async () => {
     const amount = new anchor.BN(10_000_000); // 0.01 SOL
     const protocol = "uniswap"; // NOT in the allowed list
-    const intentHash = Buffer.alloc(32);
-    intentHash.write("swap via uniswap");
 
     const [receiptPDA] = findReceiptPDA(owner.publicKey, 1);
 
     try {
       await program.methods
-        .checkAndRecord(amount, protocol, Array.from(intentHash))
+        .checkAndRecord(amount, protocol)
         .accounts({
           agentProfile: profilePDA,
           policyVault: policyPDA,
@@ -203,46 +264,22 @@ describe("nexus", () => {
   });
 
   // ─────────────────────────────────────────────────────────────────────
-  // Test 4: Daily reset — last_reset_ts > 24h ago, spend resets
+  // Test 4: Deterministic parity check for non-reset path
   // ─────────────────────────────────────────────────────────────────────
-  it("daily reset: spend resets after 24h passes", async () => {
-    // To test the 24h reset without time manipulation, we update the policy
-    // to raise the limit, do a spend that would fail if old spend remained,
-    // then verify it succeeds after a policy re-init (which resets spend).
-    //
-    // Alternative: We manipulate the account data directly.
-    // For a cleaner test, we'll re-init the policy which resets current_spend.
-
-    // First, update policy to reset (re-init resets current_spend)
-    const dailyMax = new anchor.BN(500_000_000);
-    const protocols = ["jupiter", "spl_transfer"];
-
-    await program.methods
-      .updatePolicy(dailyMax, protocols, true)
-      .accounts({
-        policyVault: policyPDA,
-        owner: owner.publicKey,
-        systemProgram: SystemProgram.programId,
-      })
-      .signers([owner])
-      .rpc();
-
-    // current_spend should still be 100_000_000 from test 1 because
-    // update_policy only resets spend on FIRST init (owner != default).
-    // But the daily reset logic in check_and_record resets if 24h passed.
-    // Since we can't manipulate time on local validator easily,
-    // let's verify the spend is preserved after update_policy.
+  it("daily window parity: without time travel, spend accumulates (no reset)", async () => {
+    // This integration test intentionally verifies the non-reset branch.
+    // The reset branch is covered deterministically in Rust unit tests:
+    // - instructions::policy_math::tests::reset_after_more_than_24h
+    // - instructions::policy_math::tests::exact_86400_boundary_does_not_reset
     const vault = await program.account.policyVault.fetch(policyPDA);
     expect(vault.currentSpend.toNumber()).to.equal(100_000_000);
 
-    // Now do a 0.3 SOL swap (total 0.4 SOL, under 0.5 SOL limit) — should succeed
     const amount = new anchor.BN(300_000_000);
-    const intentHash = Buffer.alloc(32);
-    intentHash.write("swap 0.3 SOL after reset");
-    const [receiptPDA] = findReceiptPDA(owner.publicKey, 1);
+    const receiptId = vault.nextReceiptId.toNumber();
+    const [receiptPDA] = findReceiptPDA(owner.publicKey, receiptId);
 
     const tx = await program.methods
-      .checkAndRecord(amount, "jupiter", Array.from(intentHash))
+      .checkAndRecord(amount, "jupiter")
       .accounts({
         agentProfile: profilePDA,
         policyVault: policyPDA,
@@ -253,10 +290,10 @@ describe("nexus", () => {
       .signers([owner])
       .rpc();
 
-    console.log("  check_and_record (after policy update) tx:", tx);
+    console.log("  check_and_record (no reset branch) tx:", tx);
 
     const updatedVault = await program.account.policyVault.fetch(policyPDA);
-    expect(updatedVault.currentSpend.toNumber()).to.equal(400_000_000); // 0.1 + 0.3
+    expect(updatedVault.currentSpend.toNumber()).to.equal(400_000_000);
     expect(updatedVault.nextReceiptId.toNumber()).to.equal(2);
   });
 
@@ -280,13 +317,11 @@ describe("nexus", () => {
       .rpc();
 
     const amount = new anchor.BN(10_000_000);
-    const intentHash = Buffer.alloc(32);
-    intentHash.write("any swap while inactive");
     const [receiptPDA] = findReceiptPDA(owner.publicKey, 2);
 
     try {
       await program.methods
-        .checkAndRecord(amount, "jupiter", Array.from(intentHash))
+        .checkAndRecord(amount, "jupiter")
         .accounts({
           agentProfile: profilePDA,
           policyVault: policyPDA,
@@ -321,6 +356,28 @@ describe("nexus", () => {
   // ─────────────────────────────────────────────────────────────────────
   // Bonus: close_receipt cleans up and refunds rent
   // ─────────────────────────────────────────────────────────────────────
+  it("close_receipt rejects unauthorized signer", async () => {
+    const [receiptPDA] = findReceiptPDA(owner.publicKey, 1);
+
+    try {
+      await program.methods
+        .closeReceipt()
+        .accounts({
+          executionReceipt: receiptPDA,
+          agentProfile: profilePDA,
+          owner: unauthorized.publicKey,
+        })
+        .signers([unauthorized])
+        .rpc();
+      expect.fail("Expected Unauthorized error");
+    } catch (err: any) {
+      expect(["Unauthorized", "ConstraintSeeds"]).to.include(
+        err.error.errorCode.code
+      );
+      console.log("  ✓ Correctly rejected unauthorized close_receipt");
+    }
+  });
+
   it("close_receipt refunds rent to the owner", async () => {
     const [receiptPDA] = findReceiptPDA(owner.publicKey, 0);
 

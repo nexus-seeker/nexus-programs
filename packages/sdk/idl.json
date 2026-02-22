@@ -1,0 +1,572 @@
+{
+  "address": "5twpBNVkDu9YkuQ2aDRWTB1wvA4wjBu42Q42kn7Fy2G5",
+  "metadata": {
+    "name": "onchain",
+    "version": "0.1.0",
+    "spec": "0.1.0",
+    "description": "Created with Anchor"
+  },
+  "instructions": [
+    {
+      "name": "check_and_record",
+      "docs": [
+        "The critical instruction prepended to every agent-executed transaction.",
+        "If it reverts, the entire VersionedTransaction reverts."
+      ],
+      "discriminator": [
+        168,
+        15,
+        146,
+        119,
+        165,
+        8,
+        22,
+        68
+      ],
+      "accounts": [
+        {
+          "name": "agent_profile",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  112,
+                  114,
+                  111,
+                  102,
+                  105,
+                  108,
+                  101
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "owner"
+              }
+            ]
+          }
+        },
+        {
+          "name": "policy_vault",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  112,
+                  111,
+                  108,
+                  105,
+                  99,
+                  121
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "owner"
+              }
+            ]
+          }
+        },
+        {
+          "name": "execution_receipt",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  114,
+                  101,
+                  99,
+                  101,
+                  105,
+                  112,
+                  116
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "owner"
+              },
+              {
+                "kind": "account",
+                "path": "policy_vault.next_receipt_id",
+                "account": "PolicyVault"
+              }
+            ]
+          }
+        },
+        {
+          "name": "owner",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
+        }
+      ],
+      "args": [
+        {
+          "name": "amount",
+          "type": "u64"
+        },
+        {
+          "name": "protocol",
+          "type": "string"
+        }
+      ]
+    },
+    {
+      "name": "close_receipt",
+      "docs": [
+        "Closes an ExecutionReceipt PDA and refunds rent to the owner."
+      ],
+      "discriminator": [
+        126,
+        254,
+        244,
+        203,
+        124,
+        164,
+        134,
+        89
+      ],
+      "accounts": [
+        {
+          "name": "execution_receipt",
+          "writable": true
+        },
+        {
+          "name": "agent_profile",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  112,
+                  114,
+                  111,
+                  102,
+                  105,
+                  108,
+                  101
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "owner"
+              }
+            ]
+          },
+          "relations": [
+            "execution_receipt"
+          ]
+        },
+        {
+          "name": "owner",
+          "writable": true,
+          "signer": true
+        }
+      ],
+      "args": []
+    },
+    {
+      "name": "create_profile",
+      "docs": [
+        "One-time initialization. Creates AgentProfile PDA."
+      ],
+      "discriminator": [
+        225,
+        205,
+        234,
+        143,
+        17,
+        186,
+        50,
+        220
+      ],
+      "accounts": [
+        {
+          "name": "agent_profile",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  112,
+                  114,
+                  111,
+                  102,
+                  105,
+                  108,
+                  101
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "owner"
+              }
+            ]
+          }
+        },
+        {
+          "name": "owner",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
+        }
+      ],
+      "args": []
+    },
+    {
+      "name": "update_policy",
+      "docs": [
+        "Updates policy settings. Creates PolicyVault if it doesn't exist."
+      ],
+      "discriminator": [
+        212,
+        245,
+        246,
+        7,
+        163,
+        151,
+        18,
+        57
+      ],
+      "accounts": [
+        {
+          "name": "policy_vault",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  112,
+                  111,
+                  108,
+                  105,
+                  99,
+                  121
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "owner"
+              }
+            ]
+          }
+        },
+        {
+          "name": "owner",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
+        }
+      ],
+      "args": [
+        {
+          "name": "daily_max_lamports",
+          "type": "u64"
+        },
+        {
+          "name": "allowed_protocols",
+          "type": {
+            "vec": "string"
+          }
+        },
+        {
+          "name": "is_active",
+          "type": "bool"
+        }
+      ]
+    }
+  ],
+  "accounts": [
+    {
+      "name": "AgentProfile",
+      "discriminator": [
+        60,
+        227,
+        42,
+        24,
+        0,
+        87,
+        86,
+        205
+      ]
+    },
+    {
+      "name": "ExecutionReceipt",
+      "discriminator": [
+        126,
+        220,
+        166,
+        135,
+        248,
+        208,
+        202,
+        171
+      ]
+    },
+    {
+      "name": "PolicyVault",
+      "discriminator": [
+        180,
+        22,
+        67,
+        48,
+        87,
+        214,
+        158,
+        120
+      ]
+    }
+  ],
+  "errors": [
+    {
+      "code": 6000,
+      "name": "DailyLimitExceeded",
+      "msg": "Daily spend limit would be exceeded"
+    },
+    {
+      "code": 6001,
+      "name": "ProtocolNotAllowed",
+      "msg": "Protocol is not on the allowed list"
+    },
+    {
+      "code": 6002,
+      "name": "PolicyInactive",
+      "msg": "Policy is currently inactive"
+    },
+    {
+      "code": 6003,
+      "name": "Overflow",
+      "msg": "Amount overflow"
+    },
+    {
+      "code": 6004,
+      "name": "Unauthorized",
+      "msg": "Unauthorized — signer is not the policy owner"
+    }
+  ],
+  "types": [
+    {
+      "name": "AgentProfile",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "owner",
+            "docs": [
+              "Wallet that owns this profile"
+            ],
+            "type": "pubkey"
+          },
+          {
+            "name": "seeker_id",
+            "docs": [
+              ".skr display name (user-editable, not resolved yet)"
+            ],
+            "type": "string"
+          },
+          {
+            "name": "genesis_token_holder",
+            "docs": [
+              "Flag for advanced feature gating post-MVP"
+            ],
+            "type": "bool"
+          },
+          {
+            "name": "created_at",
+            "docs": [
+              "Unix timestamp of initialization"
+            ],
+            "type": "i64"
+          },
+          {
+            "name": "bump",
+            "docs": [
+              "PDA bump seed"
+            ],
+            "type": "u8"
+          }
+        ]
+      }
+    },
+    {
+      "name": "ExecutionReceipt",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "agent_profile",
+            "docs": [
+              "Reference back to the agent profile"
+            ],
+            "type": "pubkey"
+          },
+          {
+            "name": "seeker_id",
+            "docs": [
+              "Copied from AgentProfile at receipt creation time"
+            ],
+            "type": "string"
+          },
+          {
+            "name": "intent_hash",
+            "docs": [
+              "SHA-256 of the original intent string"
+            ],
+            "type": {
+              "array": [
+                "u8",
+                32
+              ]
+            }
+          },
+          {
+            "name": "protocol",
+            "docs": [
+              "\"jupiter\" or \"spl_transfer\""
+            ],
+            "type": "string"
+          },
+          {
+            "name": "amount_lamports",
+            "docs": [
+              "Amount processed (lamports)"
+            ],
+            "type": "u64"
+          },
+          {
+            "name": "tx_signature",
+            "docs": [
+              "On-chain tx sig for Solscan link"
+            ],
+            "type": "string"
+          },
+          {
+            "name": "status",
+            "docs": [
+              "Enum: Pending | Completed | Rejected"
+            ],
+            "type": {
+              "defined": {
+                "name": "ReceiptStatus"
+              }
+            }
+          },
+          {
+            "name": "timestamp",
+            "docs": [
+              "Unix timestamp"
+            ],
+            "type": "i64"
+          },
+          {
+            "name": "bump",
+            "docs": [
+              "PDA bump seed"
+            ],
+            "type": "u8"
+          }
+        ]
+      }
+    },
+    {
+      "name": "PolicyVault",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "owner",
+            "docs": [
+              "Must match signer on check_and_record"
+            ],
+            "type": "pubkey"
+          },
+          {
+            "name": "daily_max_lamports",
+            "docs": [
+              "Max total spend in a 24h window (lamports)"
+            ],
+            "type": "u64"
+          },
+          {
+            "name": "current_spend",
+            "docs": [
+              "Accumulated spend since last_reset_ts"
+            ],
+            "type": "u64"
+          },
+          {
+            "name": "last_reset_ts",
+            "docs": [
+              "Unix timestamp of last daily reset"
+            ],
+            "type": "i64"
+          },
+          {
+            "name": "allowed_protocols",
+            "docs": [
+              "e.g. [\"jupiter\", \"spl_transfer\"] — MVP has both"
+            ],
+            "type": {
+              "vec": "string"
+            }
+          },
+          {
+            "name": "next_receipt_id",
+            "docs": [
+              "Monotonic counter used in receipt PDA seeds"
+            ],
+            "type": "u64"
+          },
+          {
+            "name": "is_active",
+            "docs": [
+              "Kill switch — policy can be paused"
+            ],
+            "type": "bool"
+          },
+          {
+            "name": "bump",
+            "docs": [
+              "PDA bump seed"
+            ],
+            "type": "u8"
+          }
+        ]
+      }
+    },
+    {
+      "name": "ReceiptStatus",
+      "type": {
+        "kind": "enum",
+        "variants": [
+          {
+            "name": "Pending"
+          },
+          {
+            "name": "Completed"
+          },
+          {
+            "name": "Rejected"
+          }
+        ]
+      }
+    }
+  ]
+}
