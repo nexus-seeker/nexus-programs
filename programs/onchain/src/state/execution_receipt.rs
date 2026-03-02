@@ -22,6 +22,8 @@ pub struct ExecutionReceipt {
     pub protocol: String,
     /// Amount processed (lamports)
     pub amount_lamports: u64,
+    /// Estimated fees saved by protocol routing (lamports)
+    pub protocol_fee_saved_lamports: u64,
     /// On-chain tx sig for Solscan link
     #[max_len(88)]
     pub tx_signature: String,

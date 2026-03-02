@@ -163,6 +163,7 @@ describe("nexus", () => {
     expect(vault.dailyMaxLamports.toNumber()).to.equal(500_000_000);
     expect(vault.currentSpend.toNumber()).to.equal(0);
     expect(vault.allowedProtocols).to.deep.equal(["jupiter", "spl_transfer"]);
+    expect(vault.protocolCaps).to.deep.equal([]);
     expect(vault.isActive).to.equal(true);
     expect(vault.nextReceiptId.toNumber()).to.equal(0);
   });
@@ -195,6 +196,7 @@ describe("nexus", () => {
     expect(receipt.agentProfile.toString()).to.equal(profilePDA.toString());
     expect(receipt.protocol).to.equal("jupiter");
     expect(receipt.amountLamports.toNumber()).to.equal(100_000_000);
+    expect(receipt.protocolFeeSavedLamports.toNumber()).to.equal(0);
     expect(Array.from(receipt.intentHash as number[]).every((byte) => byte === 0)).to.equal(false);
     expect(receipt.status).to.deep.equal({ completed: {} });
     expect(receipt.timestamp.toNumber()).to.be.greaterThan(0);
@@ -298,7 +300,65 @@ describe("nexus", () => {
   });
 
   // ─────────────────────────────────────────────────────────────────────
-  // Test 5: Kill switch — is_active = false → all check_and_record reverts
+  // Test 5: Protocol cap breach while daily cap still has room
+  // ─────────────────────────────────────────────────────────────────────
+  it("rejects when protocol-specific cap is exceeded even if daily cap remains", async () => {
+    await program.methods
+      .updatePolicy(
+        new anchor.BN(1_000_000_000),
+        ["jupiter:150000000", "spl_transfer"],
+        true
+      )
+      .accounts({
+        policyVault: policyPDA,
+        owner: owner.publicKey,
+        systemProgram: SystemProgram.programId,
+      })
+      .signers([owner])
+      .rpc();
+
+    const vaultBefore = await program.account.policyVault.fetch(policyPDA);
+    const firstReceiptId = vaultBefore.nextReceiptId.toNumber();
+    const [firstReceiptPDA] = findReceiptPDA(owner.publicKey, firstReceiptId);
+
+    await program.methods
+      .checkAndRecord(new anchor.BN(100_000_000), "jupiter")
+      .accounts({
+        agentProfile: profilePDA,
+        policyVault: policyPDA,
+        executionReceipt: firstReceiptPDA,
+        owner: owner.publicKey,
+        systemProgram: SystemProgram.programId,
+      })
+      .signers([owner])
+      .rpc();
+
+    const vaultAfterFirst = await program.account.policyVault.fetch(policyPDA);
+    const secondReceiptId = vaultAfterFirst.nextReceiptId.toNumber();
+    const [secondReceiptPDA] = findReceiptPDA(owner.publicKey, secondReceiptId);
+
+    try {
+      await program.methods
+        .checkAndRecord(new anchor.BN(60_000_000), "jupiter")
+        .accounts({
+          agentProfile: profilePDA,
+          policyVault: policyPDA,
+          executionReceipt: secondReceiptPDA,
+          owner: owner.publicKey,
+          systemProgram: SystemProgram.programId,
+        })
+        .signers([owner])
+        .rpc();
+
+      expect.fail("Expected ProtocolLimitExceeded error");
+    } catch (err: any) {
+      expect(err.error.errorCode.code).to.equal("ProtocolLimitExceeded");
+      console.log("  ✓ Correctly rejected with ProtocolLimitExceeded");
+    }
+  });
+
+  // ─────────────────────────────────────────────────────────────────────
+  // Test 6: Kill switch — is_active = false → all check_and_record reverts
   // ─────────────────────────────────────────────────────────────────────
   it("kill switch: check_and_record reverts when policy is inactive", async () => {
     // Deactivate the policy
@@ -317,7 +377,11 @@ describe("nexus", () => {
       .rpc();
 
     const amount = new anchor.BN(10_000_000);
-    const [receiptPDA] = findReceiptPDA(owner.publicKey, 2);
+    const vault = await program.account.policyVault.fetch(policyPDA);
+    const [receiptPDA] = findReceiptPDA(
+      owner.publicKey,
+      vault.nextReceiptId.toNumber()
+    );
 
     try {
       await program.methods

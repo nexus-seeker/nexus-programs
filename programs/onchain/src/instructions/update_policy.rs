@@ -1,5 +1,32 @@
-use crate::state::PolicyVault;
+use crate::state::{PolicyVault, ProtocolCap};
 use anchor_lang::prelude::*;
+
+fn parse_protocol_specs(protocol_specs: Vec<String>) -> (Vec<String>, Vec<ProtocolCap>) {
+    let mut allowed_protocols = Vec::with_capacity(protocol_specs.len());
+    let mut protocol_caps = Vec::new();
+
+    for raw_spec in protocol_specs {
+        if let Some((protocol, cap_raw)) = raw_spec.split_once(':') {
+            let protocol = protocol.trim().to_string();
+            let cap_raw = cap_raw.trim();
+            if !protocol.is_empty() {
+                allowed_protocols.push(protocol.clone());
+                if let Ok(max_lamports) = cap_raw.parse::<u64>() {
+                    protocol_caps.push(ProtocolCap {
+                        protocol,
+                        max_lamports,
+                        current_spend: 0,
+                    });
+                }
+                continue;
+            }
+        }
+
+        allowed_protocols.push(raw_spec);
+    }
+
+    (allowed_protocols, protocol_caps)
+}
 
 #[derive(Accounts)]
 pub struct UpdatePolicy<'info> {
@@ -19,10 +46,11 @@ pub struct UpdatePolicy<'info> {
 pub fn handler(
     ctx: Context<UpdatePolicy>,
     daily_max_lamports: u64,
-    allowed_protocols: Vec<String>,
+    protocol_specs: Vec<String>,
     is_active: bool,
 ) -> Result<()> {
     let vault = &mut ctx.accounts.policy_vault;
+    let (allowed_protocols, protocol_caps) = parse_protocol_specs(protocol_specs);
 
     // If this is a fresh init (owner is default/unset), set initial values
     if vault.owner == Pubkey::default() {
@@ -35,6 +63,7 @@ pub fn handler(
 
     vault.daily_max_lamports = daily_max_lamports;
     vault.allowed_protocols = allowed_protocols;
+    vault.protocol_caps = protocol_caps;
     vault.is_active = is_active;
 
     Ok(())
