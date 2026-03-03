@@ -18,6 +18,10 @@ pub mod onchain {
     }
 
     /// Updates policy settings. Creates PolicyVault if it doesn't exist.
+    ///
+    /// `allowed_protocols` accepts either plain protocol names (`jupiter`) or
+    /// protocol cap specs (`jupiter:150000000`) to configure optional
+    /// per-protocol spend limits in lamports.
     pub fn update_policy(
         ctx: Context<UpdatePolicy>,
         daily_max_lamports: u64,

@@ -1,5 +1,13 @@
 use anchor_lang::prelude::*;
 
+#[derive(AnchorSerialize, AnchorDeserialize, Clone, PartialEq, Eq, InitSpace)]
+pub struct ProtocolCap {
+    #[max_len(32)]
+    pub protocol: String,
+    pub max_lamports: u64,
+    pub current_spend: u64,
+}
+
 #[account]
 #[derive(InitSpace)]
 pub struct PolicyVault {
@@ -14,6 +22,9 @@ pub struct PolicyVault {
     /// e.g. ["jupiter", "spl_transfer"] — MVP has both
     #[max_len(5, 32)]
     pub allowed_protocols: Vec<String>,
+    /// Optional per-protocol caps (empty means no protocol-specific caps)
+    #[max_len(5)]
+    pub protocol_caps: Vec<ProtocolCap>,
     /// Monotonic counter used in receipt PDA seeds
     pub next_receipt_id: u64,
     /// Kill switch — policy can be paused

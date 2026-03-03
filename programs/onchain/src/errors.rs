@@ -6,6 +6,8 @@ pub enum NexusError {
     DailyLimitExceeded,
     #[msg("Protocol is not on the allowed list")]
     ProtocolNotAllowed,
+    #[msg("Protocol spend limit would be exceeded")]
+    ProtocolLimitExceeded,
     #[msg("Policy is currently inactive")]
     PolicyInactive,
     #[msg("Amount overflow")]

@@ -63,12 +63,18 @@ pub fn handler(ctx: Context<CheckAndRecord>, amount: u64, protocol: String) -> R
     let vault = &mut ctx.accounts.policy_vault;
     let now = Clock::get()?.unix_timestamp;
     let intent_hash = derive_intent_hash(&ctx.accounts.owner.key(), amount, &protocol);
+    let previous_reset_ts = vault.last_reset_ts;
 
     // 1. Reset daily spend if 24h has passed
     let (effective_spend, next_reset_ts) =
         apply_daily_window(now, vault.last_reset_ts, vault.current_spend);
     vault.current_spend = effective_spend;
     vault.last_reset_ts = next_reset_ts;
+    if previous_reset_ts != next_reset_ts {
+        for protocol_cap in vault.protocol_caps.iter_mut() {
+            protocol_cap.current_spend = 0;
+        }
+    }
 
     // 2. Check is_active kill switch
     require!(vault.is_active, NexusError::PolicyInactive);
@@ -79,7 +85,24 @@ pub fn handler(ctx: Context<CheckAndRecord>, amount: u64, protocol: String) -> R
         NexusError::ProtocolNotAllowed
     );
 
-    // 4. Check daily spend limit
+    // 4. Check protocol-specific limit (if configured) before daily spend limit
+    if let Some(protocol_cap) = vault
+        .protocol_caps
+        .iter_mut()
+        .find(|cap| cap.protocol == protocol)
+    {
+        let new_protocol_spend = protocol_cap
+            .current_spend
+            .checked_add(amount)
+            .ok_or(NexusError::Overflow)?;
+        require!(
+            new_protocol_spend <= protocol_cap.max_lamports,
+            NexusError::ProtocolLimitExceeded
+        );
+        protocol_cap.current_spend = new_protocol_spend;
+    }
+
+    // 5. Check daily spend limit
     let new_spend = vault
         .current_spend
         .checked_add(amount)
@@ -89,20 +112,21 @@ pub fn handler(ctx: Context<CheckAndRecord>, amount: u64, protocol: String) -> R
         NexusError::DailyLimitExceeded
     );
 
-    // 5. Update state + increment receipt id
+    // 6. Update state + increment receipt id
     vault.current_spend = new_spend;
     vault.next_receipt_id = vault
         .next_receipt_id
         .checked_add(1)
         .ok_or(NexusError::Overflow)?;
 
-    // 6. Initialize ExecutionReceipt PDA
+    // 7. Initialize ExecutionReceipt PDA
     let receipt = &mut ctx.accounts.execution_receipt;
     receipt.agent_profile = ctx.accounts.agent_profile.key();
     receipt.seeker_id = ctx.accounts.agent_profile.seeker_id.clone();
     receipt.intent_hash = intent_hash;
     receipt.protocol = protocol;
     receipt.amount_lamports = amount;
+    receipt.protocol_fee_saved_lamports = 0;
     receipt.tx_signature = String::new(); // filled off-chain after confirmation
     receipt.status = ReceiptStatus::Completed;
     receipt.timestamp = now;
