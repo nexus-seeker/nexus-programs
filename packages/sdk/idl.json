@@ -229,7 +229,11 @@
     {
       "name": "update_policy",
       "docs": [
-        "Updates policy settings. Creates PolicyVault if it doesn't exist."
+        "Updates policy settings. Creates PolicyVault if it doesn't exist.",
+        "",
+        "`allowed_protocols` accepts either plain protocol names (`jupiter`) or",
+        "protocol cap specs (`jupiter:150000000`) to configure optional",
+        "per-protocol spend limits in lamports."
       ],
       "discriminator": [
         212,
@@ -347,16 +351,21 @@
     },
     {
       "code": 6002,
+      "name": "ProtocolLimitExceeded",
+      "msg": "Protocol spend limit would be exceeded"
+    },
+    {
+      "code": 6003,
       "name": "PolicyInactive",
       "msg": "Policy is currently inactive"
     },
     {
-      "code": 6003,
+      "code": 6004,
       "name": "Overflow",
       "msg": "Amount overflow"
     },
     {
-      "code": 6004,
+      "code": 6005,
       "name": "Unauthorized",
       "msg": "Unauthorized — signer is not the policy owner"
     }
@@ -451,6 +460,13 @@
             "type": "u64"
           },
           {
+            "name": "protocol_fee_saved_lamports",
+            "docs": [
+              "Estimated fees saved by protocol routing (lamports)"
+            ],
+            "type": "u64"
+          },
+          {
             "name": "tx_signature",
             "docs": [
               "On-chain tx sig for Solscan link"
@@ -528,6 +544,19 @@
             }
           },
           {
+            "name": "protocol_caps",
+            "docs": [
+              "Optional per-protocol caps (empty means no protocol-specific caps)"
+            ],
+            "type": {
+              "vec": {
+                "defined": {
+                  "name": "ProtocolCap"
+                }
+              }
+            }
+          },
+          {
             "name": "next_receipt_id",
             "docs": [
               "Monotonic counter used in receipt PDA seeds"
@@ -547,6 +576,26 @@
               "PDA bump seed"
             ],
             "type": "u8"
+          }
+        ]
+      }
+    },
+    {
+      "name": "ProtocolCap",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "protocol",
+            "type": "string"
+          },
+          {
+            "name": "max_lamports",
+            "type": "u64"
+          },
+          {
+            "name": "current_spend",
+            "type": "u64"
           }
         ]
       }
